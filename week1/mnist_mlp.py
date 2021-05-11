@@ -11,6 +11,16 @@ class Hyperparameters:
     MINI_BATCH_SIZE: int = 10
 
 
+class NetworkUtils:
+    @staticmethod
+    def sigmoid(z: np.ndarray) -> np.ndarray:
+        return 1 / (1 + np.exp(-z))
+
+    @staticmethod
+    def sigmoid_prime(z: np.ndarray) -> np.ndarray:
+        return NetworkUtils.sigmoid(z) * (1 - NetworkUtils.sigmoid(z))
+
+
 class Network:
     def __init__(self, training_data: List[Tuple[np.ndarray, np.ndarray]],
                  testing_data: List[Tuple[np.ndarray, int]],
@@ -76,10 +86,10 @@ class Network:
         ]
 
     def _get_nabla_bias_zeroes(self):
-        return [np.zeros(np.shape(self.biases[layer])) for layer in range(self.num_layers - 1)]
+        return [np.zeros(np.shape(bias)) for bias in self.biases]
 
     def _get_nabla_wt_zeroes(self):
-        return [np.zeros(np.shape(self.weights[layer])) for layer in range(self.num_layers - 1)]
+        return [np.zeros(np.shape(wt)) for wt in self.weights]
 
     def _run_back_propagation(self, x: np.ndarray, y: np.ndarray) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         nabla_bias = self._get_nabla_bias_zeroes()
@@ -95,15 +105,16 @@ class Network:
             z = np.dot(self.weights[i], a) + self.biases[i]
             z_list.append(z)
 
-            a = self.sigmoid(z)
+            a = NetworkUtils.sigmoid(z)
             activations.append(a)
 
-        error_l = np.multiply(self._nabla_a(activations[-1], y), self.sigmoid_prime(z_list[-1]))
+        error_l = np.multiply(self._nabla_a(activations[-1], y), NetworkUtils.sigmoid_prime(z_list[-1]))
         nabla_bias[-1] = error_l
         nabla_wt[-1] = np.dot(error_l, np.transpose(activations[-2]))
+
         for layer in range(self.num_layers - 2, 0, -1):
             error_l = np.multiply(
-                np.dot(np.transpose(self.weights[layer]), error_l), self.sigmoid_prime(z_list[layer - 1])
+                np.dot(np.transpose(self.weights[layer]), error_l), NetworkUtils.sigmoid_prime(z_list[layer - 1])
             )
 
             nabla_bias[layer - 1] = error_l
@@ -113,12 +124,6 @@ class Network:
 
     def _nabla_a(self, a_l: np.ndarray, y: np.ndarray) -> np.ndarray:
         return a_l - y
-
-    def sigmoid(self, z: np.ndarray) -> np.ndarray:
-        return 1 / (1 + np.exp(-z))
-
-    def sigmoid_prime(self, z: np.ndarray) -> np.ndarray:
-        return self.sigmoid(z) * (1 - self.sigmoid(z))
 
     def _calc_accuracy(self):
         correct_results = 0
@@ -132,11 +137,11 @@ class Network:
     def feedforward(self, x: np.ndarray) -> np.ndarray:
         a = x
         for layer in range(self.num_layers - 1):
-            a = self.sigmoid(np.dot(self.weights[layer], a) + self.biases[layer])
+            a = NetworkUtils.sigmoid(np.dot(self.weights[layer], a) + self.biases[layer])
         return a
 
 
-def train():
+def train_and_eval():
     training, _, testing = load_data_wrapper()
     params = Hyperparameters
     mlp = Network(list(training), list(testing), params.SIZE, params.LEARNING_RATE, params.EPOCHS,
@@ -145,4 +150,4 @@ def train():
 
 
 if __name__ == '__main__':
-    train()
+    train_and_eval()
