@@ -7,7 +7,7 @@ from mnist_data.mnist_loader import load_data_wrapper
 class Hyperparameters:
     SIZE: List[int] = [28 * 28, 30, 10]
     LEARNING_RATE: float = 3
-    EPOCHS: int = 3
+    EPOCHS: int = 10
     MINI_BATCH_SIZE: int = 10
 
 
@@ -30,17 +30,17 @@ class Network:
 
     def _init_biases(self):
         for i in range(1, self.num_layers):
-            self.biases.append(np.random.rand(self.size[i], 1))
+            self.biases.append(np.random.randn(self.size[i], 1))
 
     def _init_weights(self):
         bias_matrix_sizes = [(self.size[x + 1], self.size[x]) for x in range(self.num_layers - 1)]
         for x, y in bias_matrix_sizes:
-            self.weights.append(np.random.rand(x, y))
+            self.weights.append(np.random.randn(x, y))
 
     def train(self):
         for epoch in range(self.epochs):
             np.random.shuffle(self.training_data)
-            print(f"Start training for epoch: {epoch} of {self.epochs}")
+            print(f"Start training for epoch: {epoch + 1} of {self.epochs}")
 
             num_mini_batches = len(self.training_data) // self.mini_batch_size
             mini_batches = self._create_mini_batches()
@@ -68,12 +68,12 @@ class Network:
             nabla_bias = [curr_b + del_b for curr_b, del_b in zip(nabla_bias, del_bias)]
             nabla_wt = [curr_wt + del_w for curr_wt, del_w in zip(nabla_wt, del_wt)]
 
-            self.biases = [
-                b - ((self.learning_rate / self.mini_batch_size) * nb) for b, nb in zip(self.biases, nabla_bias)
-            ]
-            self.weights = [
-                w - ((self.learning_rate / self.mini_batch_size) * nw) for w, nw in zip(self.weights, nabla_wt)
-            ]
+        self.biases = [
+            b - ((self.learning_rate / self.mini_batch_size) * nb) for b, nb in zip(self.biases, nabla_bias)
+        ]
+        self.weights = [
+            w - ((self.learning_rate / self.mini_batch_size) * nw) for w, nw in zip(self.weights, nabla_wt)
+        ]
 
     def _get_nabla_bias_zeroes(self):
         return [np.zeros(np.shape(self.biases[layer])) for layer in range(self.num_layers - 1)]
