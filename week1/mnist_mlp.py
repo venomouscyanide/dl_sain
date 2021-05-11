@@ -85,10 +85,10 @@ class Network:
             w - ((self.learning_rate / self.mini_batch_size) * nw) for w, nw in zip(self.weights, nabla_wt)
         ]
 
-    def _get_nabla_bias_zeroes(self):
+    def _get_nabla_bias_zeroes(self) -> List[np.ndarray]:
         return [np.zeros(np.shape(bias)) for bias in self.biases]
 
-    def _get_nabla_wt_zeroes(self):
+    def _get_nabla_wt_zeroes(self) -> List[np.ndarray]:
         return [np.zeros(np.shape(wt)) for wt in self.weights]
 
     def _run_back_propagation(self, x: np.ndarray, y: np.ndarray) -> Tuple[List[np.ndarray], List[np.ndarray]]:
