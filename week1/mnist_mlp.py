@@ -6,14 +6,14 @@ from mnist_data.mnist_loader import load_data_wrapper
 
 class Hyperparameters:
     SIZE: List[int] = [28 * 28, 30, 10]
-    LEARNING_RATE: float = 0.1
+    LEARNING_RATE: float = 3
     EPOCHS: int = 3
-    MINI_BATCH_SIZE: int = 10000
+    MINI_BATCH_SIZE: int = 10
 
 
 class Network:
     def __init__(self, training_data: List[Tuple[np.ndarray, np.ndarray]],
-                 testing_data: List[Tuple[np.ndarray, np.ndarray]],
+                 testing_data: List[Tuple[np.ndarray, int]],
                  size: List[int], learning_rate: float, epochs: int,
                  mini_batch_size: int):
         self.training_data = training_data
@@ -46,9 +46,10 @@ class Network:
             mini_batches = self._create_mini_batches()
 
             for batch, mini_batch in enumerate(mini_batches, start=1):
-                print(f"calculating SGD for: Batch {batch}/{num_mini_batches} of epoch: {epoch}")
+                if batch % 1000 == 0:
+                    print(f"calculating SGD for: Batch {batch}/{num_mini_batches} of epoch: {epoch}")
                 self._update_b_w(mini_batch)
-                self._calc_accuracy()
+            self._calc_accuracy()
 
     def _create_mini_batches(self) -> List[List[Tuple[np.ndarray, np.ndarray]]]:
         mini_batches = [
@@ -83,7 +84,7 @@ class Network:
     def _run_back_propagation(self, x: np.ndarray, y: np.ndarray) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         nabla_bias = self._get_nabla_bias_zeroes()
         nabla_wt = self._get_nabla_wt_zeroes()
-        # TODO: BP indexing is all screwed
+
         activations = []
         z_list = []
 
@@ -97,14 +98,16 @@ class Network:
             a = self.sigmoid(z)
             activations.append(a)
 
-        error_l = self._nabla_a(activations[-1], y) * self.sigmoid_prime(z_list[-1])
-        nabla_bias[-1] = activations[-1] * error_l
-        nabla_wt[-1] = error_l
+        error_l = np.multiply(self._nabla_a(activations[-1], y), self.sigmoid_prime(z_list[-1]))
+        nabla_bias[-1] = error_l
+        nabla_wt[-1] = np.dot(error_l, np.transpose(activations[-2]))
         for layer in range(self.num_layers - 2, 0, -1):
-            error_l = np.dot(np.transpose(self.weights[layer]), error_l) * self.sigmoid_prime(z_list[layer - 1])
+            error_l = np.multiply(
+                np.dot(np.transpose(self.weights[layer]), error_l), self.sigmoid_prime(z_list[layer - 1])
+            )
 
-            nabla_bias[layer] = activations[layer] * error_l
-            nabla_wt[layer] = error_l
+            nabla_bias[layer - 1] = error_l
+            nabla_wt[layer - 1] = np.dot(error_l, activations[layer - 1].transpose())
 
         return nabla_bias, nabla_wt
 
@@ -118,7 +121,19 @@ class Network:
         return self.sigmoid(z) * (1 - self.sigmoid(z))
 
     def _calc_accuracy(self):
-        pass
+        correct_results = 0
+        total_results = len(self.testing_data)
+        for x, y in self.testing_data:
+            logit = self.feedforward(x)
+            if np.argmax(logit) == y:
+                correct_results += 1
+        print(f"Total accuracy on testing data: {round((correct_results / total_results) * 100, 2)}")
+
+    def feedforward(self, x: np.ndarray) -> np.ndarray:
+        a = x
+        for layer in range(self.num_layers - 1):
+            a = self.sigmoid(np.dot(self.weights[layer], a) + self.biases[layer])
+        return a
 
 
 def train():
