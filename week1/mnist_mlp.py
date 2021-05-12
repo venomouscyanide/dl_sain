@@ -1,7 +1,7 @@
 from typing import List, Tuple
 import numpy as np
 
-from mnist_data.mnist_loader import load_data_wrapper
+from mnist_data.mnist_loader import MNISTDataLoader
 
 
 class Hyperparameters:
@@ -132,7 +132,7 @@ class Network:
             logit = self.feedforward(x)
             if np.argmax(logit) == y:
                 correct_results += 1
-        print(f"Total accuracy on testing data: {round((correct_results / total_results) * 100, 2)}")
+        print(f"Accuracy on testing data: {round((correct_results / total_results) * 100, 2)}")
 
     def feedforward(self, x: np.ndarray) -> np.ndarray:
         a = x
@@ -142,10 +142,9 @@ class Network:
 
 
 def train_and_eval():
-    training, _, testing = load_data_wrapper()
+    training, testing = MNISTDataLoader().load_data_wrapper()
     params = Hyperparameters
-    mlp = Network(list(training), list(testing), params.SIZE, params.LEARNING_RATE, params.EPOCHS,
-                  params.MINI_BATCH_SIZE)
+    mlp = Network(training, testing, params.SIZE, params.LEARNING_RATE, params.EPOCHS, params.MINI_BATCH_SIZE)
     mlp.train()
 
 
