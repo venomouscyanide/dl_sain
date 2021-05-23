@@ -23,7 +23,7 @@ class TorchMLP(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, data):
+    def forward(self, data: torch.Tensor) -> torch.Tensor:
         data = self.flatten(data)
         logits = self.mlp(data)
         return logits
