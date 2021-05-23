@@ -8,7 +8,7 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor, Lambda
 
 # Use Nvidia CUDA if available
-device = 'cpu' if torch.cuda.is_available() else 'cpu'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'Using {device} device')
 
 
