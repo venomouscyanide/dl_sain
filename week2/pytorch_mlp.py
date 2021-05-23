@@ -8,7 +8,7 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor, Lambda
 
 # Use Nvidia CUDA if available
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cpu' if torch.cuda.is_available() else 'cpu'
 print(f'Using {device} device')
 
 
@@ -54,8 +54,8 @@ def _train(model: TorchMLP, training_loader: DataLoader, learning_rate: float):
     loss_function = nn.MSELoss()
 
     for input, expected_output in training_loader.dataset:
-        prediction = model(input.cuda())
-        loss = loss_function(prediction, expected_output.cuda())
+        prediction = model(input.to(device))
+        loss = loss_function(prediction, expected_output.to(device))
 
         # Backpropagation steps
         optimizer.zero_grad()
@@ -67,8 +67,8 @@ def _test_accuracy(model: TorchMLP, testing_loader: DataLoader, epoch: int):
     total_size = len(testing_loader.dataset)
     correct_classifications = 0
     for input, expected_output in testing_loader.dataset:
-        prediction = model(input.cuda())
-        predicted_digit = prediction.cuda().argmax().__index__()
+        prediction = model(input.to(device))
+        predicted_digit = prediction.to(device).argmax().__index__()
         expected_digit = expected_output.argmax().__index__()
         if expected_digit == predicted_digit:
             correct_classifications += 1
