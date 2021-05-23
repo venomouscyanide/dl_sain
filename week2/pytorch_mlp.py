@@ -4,10 +4,10 @@ from torch import nn
 from torch.optim.sgd import SGD
 from torch.utils.data import DataLoader
 
-# Use Nvidia CUDA if available
 from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor, Lambda
 
+# Use Nvidia CUDA if available
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print(f'Using {device} device')
 
@@ -54,8 +54,8 @@ def _train(model: TorchMLP, training_loader: DataLoader, learning_rate: float):
     loss_function = nn.MSELoss()
 
     for input, expected_output in training_loader.dataset:
-        prediction = model(input)
-        loss = loss_function(prediction, expected_output)
+        prediction = model(input.cuda())
+        loss = loss_function(prediction, expected_output.cuda())
 
         # Backpropagation steps
         optimizer.zero_grad()
@@ -67,8 +67,8 @@ def _test_accuracy(model: TorchMLP, testing_loader: DataLoader, epoch: int):
     total_size = len(testing_loader.dataset)
     correct_classifications = 0
     for input, expected_output in testing_loader.dataset:
-        prediction = model(input)
-        predicted_digit = prediction.argmax().__index__()
+        prediction = model(input.cuda())
+        predicted_digit = prediction.cuda().argmax().__index__()
         expected_digit = expected_output.argmax().__index__()
         if expected_digit == predicted_digit:
             correct_classifications += 1
@@ -91,7 +91,7 @@ def train_and_eval_torch_mlp():
     training_loader = DataLoader(train_data, batch_size=params.MINI_BATCH_SIZE, shuffle=True)
     testing_loader = DataLoader(test_data, batch_size=params.MINI_BATCH_SIZE, shuffle=True)
 
-    model = TorchMLP()
+    model = TorchMLP().to(device)
     for epoch in range(params.EPOCHS):
         print(f"Training for epoch: {epoch}")
         _train(model, training_loader, params.LEARNING_RATE)
