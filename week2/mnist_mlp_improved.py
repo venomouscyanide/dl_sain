@@ -163,7 +163,7 @@ class Network:
             activations.append(a)
 
     def _set_softmax_activation(self, a: np.ndarray, z_list: List[np.ndarray], activations: List[np.ndarray]):
-        # output later(softmax activation)
+        # output layer(softmax activation)
         z = np.dot(self.weights[-1], a) + self.biases[-1]
         z_list.append(z)
         a = NetworkUtils.softmax(z)
