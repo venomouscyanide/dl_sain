@@ -5,22 +5,35 @@ from mnist_data.mnist_loader import MNISTDataLoader
 
 
 class Hyperparameters:
-    SIZE: List[int] = [28 * 28, 30, 10]
-    LEARNING_RATE: float = 3
-    EPOCHS: int = 10
-    MINI_BATCH_SIZE: int = 10
-    LMDA: int = 0.5
+    SIZE: List[int] = [28 * 28, 100, 100, 10]
+    LEARNING_RATE: float = 0.1
+    EPOCHS: int = 50
+    MINI_BATCH_SIZE: int = 100
+    # Add lambda hyperparameter
+    LMDA: int = 5
+
+    def __str__(self) -> str:
+        str_rep = ""
+        str_rep += "Hyperparameters set are as follows"
+        for hyper_param in self.__annotations__:
+            str_rep += f' \n {hyper_param}: {getattr(self, hyper_param)}'
+        return str_rep
 
 
 class NetworkUtils:
+    # Replace sigmoid with relu for hidden and softmax for output layer
     @staticmethod
-    def sigmoid(z: np.ndarray) -> np.ndarray:
-        return 1 / (1 + np.exp(-z))
+    def relu(z: np.ndarray) -> np.ndarray:
+        return np.maximum(z, 0.0)
 
     @staticmethod
-    def sigmoid_prime(z: np.ndarray) -> np.ndarray:
-        sigmoid = NetworkUtils.sigmoid(z)
-        return sigmoid * (1 - sigmoid)
+    def relu_prime(z: np.ndarray) -> np.ndarray:
+        return (z > 0.0) * 1
+
+    @staticmethod
+    def softmax(z):
+        exp_z = np.exp(z)
+        return exp_z / sum(exp_z)
 
 
 class Network:
@@ -61,10 +74,9 @@ class Network:
             mini_batches = self._create_mini_batches()
 
             for batch, mini_batch in enumerate(mini_batches, start=1):
-                if batch % 1000 == 0:
-                    print(f"calculating SGD for: Batch {batch}/{num_mini_batches} of epoch: {epoch}")
                 self._update_b_w(mini_batch)
-            self._calc_accuracy()
+                if batch % 300 == 0:
+                    self._calc_accuracy(epoch + 1, batch, num_mini_batches)
 
     def _create_mini_batches(self) -> List[List[Tuple[np.ndarray, np.ndarray]]]:
         mini_batches = [
@@ -102,27 +114,16 @@ class Network:
         nabla_bias = self._get_nabla_bias_zeroes()
         nabla_wt = self._get_nabla_wt_zeroes()
 
-        activations = []
-        z_list = []
-
-        a = x
-        activations.append(a)
-
-        for i in range(self.num_layers - 1):
-            z = np.dot(self.weights[i], a) + self.biases[i]
-            z_list.append(z)
-
-            a = NetworkUtils.sigmoid(z)
-            activations.append(a)
-
-        error_l = np.multiply(self._nabla_a(activations[-1], y), NetworkUtils.sigmoid_prime(z_list[-1]))
+        activations, z_list = self.feedforward(x)
+        # Delta for cross entropy
+        error_l = self._delta_cross_entropy(activations[-1], y)
 
         nabla_bias[-1] = error_l
         nabla_wt[-1] = np.dot(error_l, np.transpose(activations[-2]))
 
         for layer in range(self.num_layers - 2, 0, -1):
             error_l = np.multiply(
-                np.dot(np.transpose(self.weights[layer]), error_l), NetworkUtils.sigmoid_prime(z_list[layer - 1])
+                np.dot(np.transpose(self.weights[layer]), error_l), NetworkUtils.relu_prime(z_list[layer - 1])
             )
 
             nabla_bias[layer - 1] = error_l
@@ -130,28 +131,49 @@ class Network:
 
         return nabla_bias, nabla_wt
 
-    def _nabla_a(self, a_l: np.ndarray, y: np.ndarray) -> np.ndarray:
+    def _delta_cross_entropy(self, a_l: np.ndarray, y: np.ndarray) -> np.ndarray:
         return a_l - y
 
-    def _calc_accuracy(self):
+    def _calc_accuracy(self, epoch: int, batch: int, total_batches: int):
         correct_results = 0
         total_results = len(self.testing_data)
         for x, y in self.testing_data:
-            logit = self.feedforward(x)
+            activations, _ = self.feedforward(x)
+            logit = activations[-1]
             if np.argmax(logit) == y:
                 correct_results += 1
-        print(f"Accuracy on testing data: {round((correct_results / total_results) * 100, 2)}")
+        print(
+            f"Accuracy on testing data for epoch {epoch} mini_batch {batch} of {total_batches}: {round((correct_results / total_results) * 100, 2)}"
+        )
 
-    def feedforward(self, x: np.ndarray) -> np.ndarray:
+    def feedforward(self, x: np.ndarray) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         a = x
-        for layer in range(self.num_layers - 1):
-            a = NetworkUtils.sigmoid(np.dot(self.weights[layer], a) + self.biases[layer])
-        return a
+        activations, z_list = list(), list()
+        activations.append(x)
+        self._set_relu_activations(a, z_list, activations)
+        self._set_softmax_activation(activations[-1], z_list, activations)
+        return activations, z_list
+
+    def _set_relu_activations(self, a: np.ndarray, z_list: List[np.ndarray], activations: List[np.ndarray]):
+        for layer in range(self.num_layers - 2):
+            # hidden layers(relu activation)
+            z = np.dot(self.weights[layer], a) + self.biases[layer]
+            z_list.append(z)
+            a = NetworkUtils.relu(z)
+            activations.append(a)
+
+    def _set_softmax_activation(self, a: np.ndarray, z_list: List[np.ndarray], activations: List[np.ndarray]):
+        # output later(softmax activation)
+        z = np.dot(self.weights[-1], a) + self.biases[-1]
+        z_list.append(z)
+        a = NetworkUtils.softmax(z)
+        activations.append(a)
 
 
 def train_and_eval():
     training, testing = MNISTDataLoader().load_data_wrapper()
-    params = Hyperparameters
+    params = Hyperparameters()
+    print(params)
     mlp = Network(training, testing, params.SIZE, params.LEARNING_RATE, params.EPOCHS, params.MINI_BATCH_SIZE,
                   params.LMDA)
     mlp.train()
