@@ -2,7 +2,7 @@ import gzip
 import shutil
 import gdown
 
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 import numpy as np
 
@@ -23,8 +23,18 @@ class MNISTDataLoader:
         training_data_tuple = self.load_data_as_ndarray(self.TRAINING_DATA_URL, self.TRAINING_DATA_LABELS_URL, True)
         return training_data_tuple, testing_data_tuple
 
+    def load_data_wrapper_with_validation(self):
+        testing_data_tuple = self.load_data_as_ndarray(self.TESTING_DATA_URL, self.TESTING_DATA_LABELS_URL, False)
+        training_data_tuple = self.load_data_as_ndarray(self.TRAINING_DATA_URL, self.TRAINING_DATA_LABELS_URL, True)
+
+        slice_threshold = len(training_data_tuple) - len(testing_data_tuple)
+        training_data_tuple, validation_data_tuple = training_data_tuple[:slice_threshold], training_data_tuple[
+                                                                                            slice_threshold:]
+        self._convert_label_to_int(validation_data_tuple)
+        return training_data_tuple, testing_data_tuple, validation_data_tuple
+
     def load_data_as_ndarray(self, data_file_url: str, data_labels_file_url: str, train: bool) -> List[
-        Tuple[np.ndarray, int]]:
+        Tuple[np.ndarray, Union[int, np.ndarray]]]:
         uncompressed_dataset = self._download_and_uncompressed_file(data_file_url)
         uncompressed_labels = self._download_and_uncompressed_file(data_labels_file_url)
         pixel_data = self._get_pixel_data(uncompressed_dataset)
@@ -59,12 +69,16 @@ class MNISTDataLoader:
             pixel_data = pixel_data.reshape((num_data, num_rows * num_colums))
         return pixel_data
 
-    def _get_labels(self, data_labels_file: str) -> np.ndarray:
+    def _get_labels(self, data_labels_file: str) -> Union[np.ndarray, int]:
         with open(data_labels_file, "rb") as labels:
             _, num_data = struct.unpack(">II", labels.read(8))
             label_data = np.fromfile(labels, dtype=np.uint8)
             label_data = label_data.reshape((num_data, -1))
         return label_data
+
+    def _convert_label_to_int(self, validation_data_tuple: List[Tuple[np.ndarray, np.ndarray]]):
+        for index, (inp, label) in enumerate(validation_data_tuple):
+            validation_data_tuple[index] = (inp, label.argmax())
 
 
 if __name__ == '__main__':

@@ -1,6 +1,6 @@
 import copy
 import random
-from typing import List, Tuple
+from typing import List, Tuple, Union
 import numpy as np
 
 from mnist_data.mnist_loader import MNISTDataLoader
@@ -41,10 +41,13 @@ class NetworkUtils:
 
 
 class Network:
+    TESTING_DATA_TYPE: str = "testing"
+    TRAINING_DATA_TYPE: str = "training"
+
     def __init__(self, training_data: List[Tuple[np.ndarray, np.ndarray]],
                  testing_data: List[Tuple[np.ndarray, int]],
                  size: List[int], learning_rate: float, epochs: int,
-                 mini_batch_size: int, lmda: int):
+                 mini_batch_size: int, lmda: int, training_accuracy_print: bool, testing_accuracy_print: bool):
         self.training_data = training_data
         self.testing_data = testing_data
         self.size = size
@@ -58,6 +61,8 @@ class Network:
         self.epochs = epochs
         self.mini_batch_size = mini_batch_size
         self.lmda = lmda
+        self.testing_accuracy_print = testing_accuracy_print
+        self.training_accuracy_print = training_accuracy_print
 
     def _init_biases(self):
         for i in range(1, self.num_layers):
@@ -106,15 +111,16 @@ class Network:
             np.random.shuffle(self.training_data)
             print(f"Start training for epoch: {epoch + 1} of {self.epochs}")
 
-            num_mini_batches = len(self.training_data) // self.mini_batch_size
             mini_batches = self._create_mini_batches()
 
-            batch = 0
             for batch, mini_batch in enumerate(mini_batches, start=1):
                 self._update_b_w(mini_batch)
 
             self._update_wt_bias()
-            self._calc_accuracy(epoch + 1, batch, num_mini_batches)
+            if self.training_accuracy_print:
+                self._calc_accuracy(epoch + 1, self.training_data, self.TRAINING_DATA_TYPE)
+            if self.testing_accuracy_print:
+                self._calc_accuracy(epoch + 1, self.testing_data, self.TESTING_DATA_TYPE)
 
     def _create_mini_batches(self) -> List[List[Tuple[np.ndarray, np.ndarray]]]:
         mini_batches = [
@@ -195,16 +201,19 @@ class Network:
             x_indices_for_wt = self.retained_indices[layer + 1]
             self.biases[layer][x_indices_for_wt] = self.dropout_biases[layer]
 
-    def _calc_accuracy(self, epoch: int, batch: int, total_batches: int):
+    def _calc_accuracy(self, epoch: int, data: List[Tuple[np.ndarray, Union[np.ndarray, int]]], data_type: str):
         correct_results = 0
-        total_results = len(self.testing_data)
-        for x, y in self.testing_data:
+        total_results = len(data)
+        for x, y in data:
+            if data_type == self.TRAINING_DATA_TYPE:
+                y = y.argmax()
             activations, _ = self.feedforward(x, self.weights, self.biases)
             logit = activations[-1]
-            if np.argmax(logit) == y:
+            if logit.argmax() == y:
                 correct_results += 1
+        accuracy = round((correct_results / total_results) * 100, 2)
         print(
-            f"Accuracy on testing data for epoch {epoch} mini_batch {batch} of {total_batches}: {round((correct_results / total_results) * 100, 2)}"
+            f"Accuracy on {data_type} data for epoch {epoch}: {accuracy}"
         )
 
     def feedforward(self, x: np.ndarray, wt: List[np.ndarray], bias: List[np.ndarray]) -> \
@@ -235,11 +244,12 @@ class Network:
 
 
 def train_and_eval():
-    training, testing = MNISTDataLoader().load_data_wrapper()
+    training, testing, validation = MNISTDataLoader().load_data_wrapper_with_validation()
     params = Hyperparameters()
     print(params)
-    mlp = Network(training, testing, params.SIZE, params.LEARNING_RATE, params.EPOCHS, params.MINI_BATCH_SIZE,
-                  params.LMDA)
+    mlp = Network(training[: 1000], validation[:100], params.SIZE, params.LEARNING_RATE, params.EPOCHS,
+                  params.MINI_BATCH_SIZE,
+                  params.LMDA, training_accuracy_print=True, testing_accuracy_print=True)
     mlp.train()
 
 
