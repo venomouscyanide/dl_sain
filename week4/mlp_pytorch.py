@@ -72,7 +72,7 @@ class TorchMLP(nn.Module):
         logits = self.mlp(data)
         return logits
 
-    def train_model(self, training_loader: DataLoader):
+    def train_model(self, training_loader: DataLoader, verbose: bool = True):
         torch.manual_seed(self.seed)
         for input, labels in itertools.islice(training_loader, self.training_size // self.batch_size):
             prediction = self(input.to(device))
@@ -83,7 +83,7 @@ class TorchMLP(nn.Module):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-        self.evaluate(training_loader, self.training_size)
+        self.evaluate(training_loader, self.training_size, verbose=verbose)
 
     def evaluate(self, data_loader: DataLoader, dataset_size: int, data_type: str = "training",
                  verbose: bool = True) -> float:

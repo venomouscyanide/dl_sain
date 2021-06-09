@@ -99,7 +99,7 @@ class HyperTuner:
                 for epoch in range(num_epochs):
                     if verbose:
                         print(f"Training for epoch: {epoch}")
-                    model.train_model(training_loader)
+                    model.train_model(training_loader, verbose)
                     accuracy = model.evaluate(testing_loader, model.testing_size, "testing", verbose)
                     accuracies = np.append(accuracies, accuracy)
                     best_accuracy = max(best_accuracy, accuracy)
@@ -123,4 +123,4 @@ class HyperTuner:
 
 
 if __name__ == '__main__':
-    eval_data = HyperTuner().tune(TestingConfig.CONFIG)
+    eval_data = HyperTuner().tune(TestingConfig.CONFIG, True)
