@@ -22,17 +22,18 @@ class TorchMLP(nn.Module):
                  output_act_function_kwargs: Dict[Any, Any],
                  optimizer: str, learning_rate: float, lmda_wt_decay: float, p_to_be_zeroed: float, batch_size: int,
                  training_size: int = 60000,
-                 testing_size: int = 10000, seed: int = 42):
+                 testing_size: int = 10000, seed: int = 42, dropout_on_input: bool = False):
         super().__init__()
         self.size = size
         self.loss_func = loss_func
         self.hidden_act_function = hidden_act_function
         self.output_act_function = output_act_function
-        self.output_act_function_kwargs= output_act_function_kwargs
+        self.output_act_function_kwargs = output_act_function_kwargs
         self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.lmda_wt_decay = lmda_wt_decay
         self.p_to_be_zeroed = p_to_be_zeroed
+        self.dropout_on_input = dropout_on_input
         self.flatten = nn.Flatten()
         nn_stack = self._form_nn_stack()
         self.mlp = nn.Sequential(*nn_stack)
@@ -49,8 +50,10 @@ class TorchMLP(nn.Module):
         # hidden layers
         for layer in range(len(self.size) - 2):
             nn_stack.append(nn.Linear(self.size[layer], self.size[layer + 1]))
+            if (layer == 0 and self.dropout_on_input and self.p_to_be_zeroed > 0) or \
+                    (layer > 0 and self.p_to_be_zeroed > 0):
+                nn_stack.append(nn.Dropout(self.p_to_be_zeroed))
             nn_stack.append(getattr(nn, self.hidden_act_function)())
-            nn_stack.append(nn.Dropout(self.p_to_be_zeroed))
         # output layer
         nn_stack.append(nn.Linear(self.size[-2], self.size[-1]))
         nn_stack.append(getattr(nn, self.output_act_function)(**self.output_act_function_kwargs))
@@ -80,9 +83,10 @@ class TorchMLP(nn.Module):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-        self.evaluate(training_loader, self.training_size, "testing")
+        self.evaluate(training_loader, self.training_size)
 
-    def evaluate(self, data_loader: DataLoader, dataset_size: int, data_type: str = "training"):
+    def evaluate(self, data_loader: DataLoader, dataset_size: int, data_type: str = "training",
+                 verbose: bool = True) -> float:
         correct_classifications = 0
         with torch.no_grad():
             torch.manual_seed(self.seed)
@@ -90,7 +94,10 @@ class TorchMLP(nn.Module):
                 prediction = self(input.to(device))
                 labels = labels.to(device)
                 correct_classifications += (prediction.argmax(1) == labels).type(torch.float).sum().item()
-        print(f'Accuracy on {data_type} data {round((correct_classifications / dataset_size) * 100, 2)}%')
+        accuracy = round((correct_classifications / dataset_size) * 100, 2)
+        if verbose:
+            print(f'Accuracy on {data_type} data {accuracy}%')
+        return accuracy
 
 
 def one_hot_encode(y):
@@ -119,7 +126,9 @@ def run():
         p_to_be_zeroed=0.20,
         batch_size=10,
         training_size=5000,
-        testing_size=2000
+        testing_size=2000,
+        seed=42,
+        dropout_on_input=True
     ).to(device)
     for epoch in range(10):
         print(f"Training for epoch: {epoch}")
