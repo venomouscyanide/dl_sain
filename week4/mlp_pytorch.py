@@ -74,6 +74,8 @@ class TorchMLP(nn.Module):
         for input, labels in itertools.islice(training_loader, self.training_size // self.batch_size):
             prediction = self(input.to(device))
             labels = labels.to(device)
+            if self.loss_function._get_name() == 'MSELoss':
+                labels = torch.nn.functional.one_hot(labels, 10).float()
             loss = self.loss_function(prediction, labels)
             self.optimizer.zero_grad()
             loss.backward()
