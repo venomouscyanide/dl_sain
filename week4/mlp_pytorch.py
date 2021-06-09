@@ -98,7 +98,6 @@ def one_hot_encode(y):
 
 
 def run():
-    # TODO: MSELoss() option is broken
     train_data = MirrorMNIST(root='mnist_torch_data', train=True, download=False, transform=ToTensor())
     test_data = MirrorMNIST(root='mnist_torch_data', train=False, download=False, transform=ToTensor())
 
