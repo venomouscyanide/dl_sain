@@ -28,10 +28,11 @@ class EvalData:
         print("Added record to eval DF")
 
     def get(self) -> pd.DataFrame:
-        # push avg_accuracy col to the first column and sort by it
-        self.data.columns.tolist().remove("avg_accuracy")
-        self.data = self.data.reindex(columns=["avg_accuracy"] + self.data.columns.tolist())
-        return self.data.sort_values(by="best_accuracy", ascending=False)
+        # push "best_accuracy", "avg_accuracy", "avg_time_taken" cols to the front and sort by "avg_accuracy"
+        curr_cols = self.data.columns.tolist()
+        updated_order = curr_cols[-3:] + curr_cols[:-3]
+        self.data = self.data[updated_order]
+        return self.data.sort_values(by="avg_accuracy", ascending=False)
 
 
 class TestingConfig:
