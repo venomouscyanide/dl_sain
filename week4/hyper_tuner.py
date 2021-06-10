@@ -27,7 +27,10 @@ class EvalData:
         self.data = self.data.append(data_dict, ignore_index=True)
         print("Added record to eval DF")
 
-    def get(self):
+    def get(self) -> pd.DataFrame:
+        # push avg_accuracy col to the first column and sort by it
+        self.data.columns.tolist().remove("avg_accuracy")
+        self.data = self.data.reindex(columns=["avg_accuracy"] + self.data.columns.tolist())
         return self.data.sort_values(by="best_accuracy", ascending=False)
 
 
@@ -51,7 +54,7 @@ class TestingConfig:
 
 
 class HyperTuner:
-    def tune(self, config: Dict, verbose: bool = True):
+    def tune(self, config: Dict, verbose: bool = True) -> pd.DataFrame:
         eval_data = EvalData()
         train_data = MirrorMNIST(root='mnist_torch_data', train=True, download=False, transform=ToTensor())
         test_data = MirrorMNIST(root='mnist_torch_data', train=False, download=False, transform=ToTensor())
@@ -62,7 +65,6 @@ class HyperTuner:
             combination_dict = {k: v for k, v in zip(config.keys(), combination)}
             accuracies = np.array([])
             time_consumed = np.array([])
-            best_accuracy = 0
 
             for seed in [28, 35, 42]:
                 batch_size = combination_dict["batch_size"]
@@ -102,15 +104,14 @@ class HyperTuner:
                     model.train_model(training_loader, verbose)
                     accuracy = model.evaluate(testing_loader, model.testing_size, "testing", verbose)
                     accuracies = np.append(accuracies, accuracy)
-                    best_accuracy = max(best_accuracy, accuracy)
                 time_for_seed = time.time() - time_epoch_start
                 time_consumed = np.append(time_consumed, time_for_seed)
 
             avg_time = np.mean(time_consumed)
             avg_accuracy = np.mean(accuracies)
-
+            best_accuracy = np.max(accuracies)
             combination_dict.update({
-                "best_accuracy": avg_time,
+                "best_accuracy": best_accuracy,
                 "avg_accuracy": avg_accuracy,
                 "avg_time_taken": avg_time
             })
@@ -118,7 +119,7 @@ class HyperTuner:
             eval_data.add_record(combination_dict)
 
             if verbose:
-                print(eval_data.data)
+                print(eval_data.get())
         return eval_data.get()
 
 
