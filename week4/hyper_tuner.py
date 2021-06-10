@@ -72,7 +72,7 @@ class HyperTuner:
 
                 torch.manual_seed(seed)
                 training_subset, validation_subset = random_split(train_data, lengths=[50000, 10000])
-                training_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+                training_loader = DataLoader(training_subset, batch_size=batch_size, shuffle=True)
                 validation_loader = DataLoader(validation_subset, batch_size=batch_size, shuffle=True)
                 testing_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
 
