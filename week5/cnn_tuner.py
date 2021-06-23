@@ -9,17 +9,16 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import random_split
-from torchvision.transforms import ToTensor
 
-from week2.pytorch_mlp import MirrorMNIST
-from week4.mlp_pytorch import device
+from week2.pytorch_mlp import device
+from week5.dataloader_wrapper import GetDataLoaderFactory
 from week5.mnist_cnn import TorchCNN
 
 
 class EvalData:
     def __init__(self):
         self.data = pd.DataFrame(
-            columns=["epochs", "nn_stack", "loss_func",
+            columns=["dataset", "epochs", "nn_stack", "loss_func",
                      "optimizer", "learning_rate", "weight_decay", "batch_size", "momentum",
                      "testing_dataset_type", "training_size", "testing_size",
                      "best_accuracy", "avg_accuracy",
@@ -41,14 +40,16 @@ class EvalData:
 class HyperTuner:
     def tune(self, config: Dict, verbose: bool = True) -> pd.DataFrame:
         eval_data = EvalData()
-        train_data = MirrorMNIST(root='mnist_torch_data', train=True, download=True, transform=ToTensor())
-        test_data = MirrorMNIST(root='mnist_torch_data', train=False, download=True, transform=ToTensor())
 
         all_combinations = list(itertools.product(*config.values()))
         print(f"Total combinations for exp: {len(all_combinations)}")
         for combination in all_combinations:
             # reconstruct the dict using the combination
             combination_dict = {k: v for k, v in zip(config.keys(), combination)}
+
+            data_loader = GetDataLoaderFactory().get(combination_dict["dataset"])()
+            train_data, test_data = data_loader.get_data()
+
             accuracies = np.array([])
             time_consumed = np.array([])
 
@@ -56,13 +57,14 @@ class HyperTuner:
                 batch_size = combination_dict["batch_size"]
                 testing_dataset_type = combination_dict["testing_dataset_type"]
 
-                torch.manual_seed(seed)
                 training_subset = train_data
+                torch.manual_seed(seed)
                 training_loader = DataLoader(training_subset, batch_size=batch_size, shuffle=True)
                 testing_loader = DataLoader(test_data, batch_size=batch_size, shuffle=True)
 
                 if testing_dataset_type == "validation":
-                    training_subset, validation_subset = random_split(train_data, lengths=[50000, 10000])
+                    splits = data_loader.get_validation_splits()
+                    training_subset, validation_subset = random_split(train_data, lengths=splits)
                     validation_loader = DataLoader(validation_subset, batch_size=batch_size, shuffle=True)
                     testing_loader = validation_loader if testing_dataset_type == "validation" else testing_loader
 
@@ -90,6 +92,8 @@ class HyperTuner:
                 time_for_seed = time.time() - time_epoch_start
                 time_consumed = np.append(time_consumed, time_for_seed)
 
+                self._reset_params(model)
+
             avg_time = np.mean(time_consumed)
             avg_accuracy = np.mean(accuracies)
             best_accuracy = np.max(accuracies)
@@ -106,6 +110,11 @@ class HyperTuner:
                 print(eval_data.get(rearrange=False))
         return eval_data.get(rearrange=True)
 
+    def _reset_params(self, model: nn.Module):
+        for layer in list(model.children())[0]:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+
 
 def _get_nn_stacks_with_dropouts(base_architectures, dropout_options):
     # 3 loops poggers
@@ -121,7 +130,9 @@ def _get_nn_stacks_with_dropouts(base_architectures, dropout_options):
 
 
 if __name__ == '__main__':
+    # for some reason, local runs on gpu was not giving reproducible results. Seeds on cuda causing issues?
     class TestingConfig:
+        torch.manual_seed(21)
         base_architectures = [[nn.Conv2d(in_channels=1, out_channels=20, kernel_size=5, stride=1),
                                nn.ReLU(),
                                nn.MaxPool2d(kernel_size=2, stride=2),
@@ -137,18 +148,19 @@ if __name__ == '__main__':
                                nn.Linear(40 * 4 * 4 * 2, 10),
                                nn.ReLU()]]
         CONFIG = {
+            "dataset": ["MNIST"],
             "epochs": [20],
-            "nn_stack": _get_nn_stacks_with_dropouts(base_architectures, dropout_options=[0.0, 0.10, 0.20]),
+            "nn_stack": _get_nn_stacks_with_dropouts(base_architectures, dropout_options=[0.0, 0.10]),
             "loss_func": ["CrossEntropyLoss"],
             "optimizer": ["SGD"],
             "learning_rate": [1e-2],
             "weight_decay": [1e-4],
             "batch_size": [10],
             "testing_dataset_type": ["validation"],
-            "training_size": [5000],
+            "training_size": [10000],
             "testing_size": [1000],
             "momentum": [0.9]
         }
 
 
-    eval_data = HyperTuner().tune(TestingConfig.CONFIG, False)
+    eval_data = HyperTuner().tune(TestingConfig.CONFIG, True)

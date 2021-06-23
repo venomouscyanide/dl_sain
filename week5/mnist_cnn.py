@@ -6,21 +6,16 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
 
-# Use Nvidia CUDA if available
-from week2.pytorch_mlp import MirrorMNIST
-
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print(f'Using {device} device')
+from week2.pytorch_mlp import MirrorMNIST, device
 
 
 class TorchCNN(nn.Module):
     def __init__(self, loss_func: str,
                  optimizer: str, learning_rate: float, lmda_wt_decay: float, batch_size: int,
-                 momentum: float, nn_stack: List[nn.Module], training_size: int = 60000,
-                 testing_size: int = 10000, seed: int = 42):
+                 momentum: float, nn_stack: List[nn.Module], training_size: int,
+                 testing_size: int, seed: int = 42):
         super().__init__()
         self.loss_func = loss_func
         self.optimizer = optimizer
@@ -55,6 +50,7 @@ class TorchCNN(nn.Module):
             prediction = self(input.to(device))
             labels = labels.to(device)
             if self.loss_function._get_name() == 'MSELoss':
+                # TODO: This will not work for CIFAR100
                 labels = torch.nn.functional.one_hot(labels, 10).float()
             loss = self.loss_function(prediction, labels)
             self.optimizer.zero_grad()
@@ -72,13 +68,16 @@ class TorchCNN(nn.Module):
                 prediction = self(input.to(device))
                 labels = labels.to(device)
                 correct_classifications += (prediction.argmax(1) == labels).type(torch.float).sum().item()
-        accuracy = round((correct_classifications / dataset_size) * 100, 2)
+        numerator = int(correct_classifications)
+        denominator = dataset_size
+        accuracy = round((numerator / denominator) * 100, 2)
         if verbose:
-            print(f'Accuracy on {data_type} data {accuracy}%')
+            print(f'Accuracy on {data_type} data {accuracy}({numerator}/{denominator})%')
         return accuracy
 
 
 def run():
+    torch.manual_seed(21)
     model = TorchCNN(
         loss_func="CrossEntropyLoss",
         optimizer="SGD",
@@ -106,6 +105,7 @@ def run():
     ).to(device)
     train_data = MirrorMNIST(root='mnist_torch_data', train=True, download=True, transform=ToTensor())
     test_data = MirrorMNIST(root='mnist_torch_data', train=False, download=True, transform=ToTensor())
+    torch.manual_seed(21)
     training_loader = DataLoader(train_data, batch_size=10, shuffle=True)
     testing_loader = DataLoader(test_data, batch_size=10, shuffle=True)
     accuracies = []
