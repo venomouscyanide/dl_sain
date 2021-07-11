@@ -7,6 +7,8 @@
 # Docs for GRU: https://pytorch.org/docs/master/generated/torch.nn.GRU.html#torch.nn.GRU
 # Help understand the dimensionality of input/output/hidden layers explained by referring the above link: https://stackoverflow.com/a/45023288
 
+# Docs for LSTM: https://pytorch.org/docs/master/generated/torch.nn.LSTM.html#torch.nn.LSTM
+# GRU is currently replaced with LSTM in this script.
 import string
 
 import torch
@@ -59,38 +61,39 @@ class ShakespeareRNN(nn.Module):
         self.embedding = nn.Embedding(len(string.printable), self.embeding_size)
         # GRU args are (6, 100, 2)
         # args to GRU chosen below (num_features, hidden_size, number_of_layers to stack)
-        self.rnn = nn.GRU(self.embeding_size, hidden_size, num_layers=n_layers)
+        self.rnn = nn.LSTM(self.embeding_size, hidden_size, num_layers=n_layers)
         self.decoder = nn.Linear(hidden_size, output_size)
 
     def init_hidden(self):
         return torch.zeros(self.n_layers, 1, self.hidden_size).to(device)
 
-    def forward(self, input, hidden):
+    def forward(self, input, hidden, cell_state):
         x = self.embedding(input)
         # The input dimensions are (seq_len, batch, input_size)
         # https://pytorch.org/docs/stable/tensor_view.html
         # x is (1,6)
         # we have to make x => (1, 1, 6)
-        x, hidden = self.rnn(x.view(1, 1, x.size(-1)), hidden)
+        x, (hidden, cell_state) = self.rnn(x.view(1, 1, x.size(-1)), (hidden, cell_state))
         output = self.decoder(x)
         # output is (1, 1, 100) as self.output_size = 100
         # TODO: what is the use of variable `tag_scores`
         tag_scores = F.log_softmax(output[-1], dim=1)
-        return output, hidden
+        return output, (hidden, cell_state)
 
 
 def evaluate(model, prime_str='A', predict_len=100):
     hidden = model.init_hidden()
+    cell_state = model.init_hidden()
     prime_input = char_tensor(prime_str)
     predicted = prime_str
 
     # Use priming string to "build up" hidden state
     for p in range(len(prime_str) - 1):
-        _, hidden = model(prime_input[p], hidden)
+        _, (hidden, cell_state) = model(prime_input[p], hidden, cell_state)
     input = prime_input[-1]
 
     for p in range(predict_len):
-        output, hidden = model(input, hidden)
+        output, (hidden, cell_state) = model(input, hidden, cell_state)
 
         # Sample from the network as a multinomial distribution
         # TODO: Why are we doing this? Did not understand so far.
@@ -122,12 +125,13 @@ def train_and_eval_shakespeare():
         input, target = random_train_data()
         chunk_len = len(input)
         hidden = model.init_hidden()
+        cell_state = model.init_hidden()
         # the hidden dimensions are (num_layers, batch, hidden_size)
         # hidden.size = torch.Size([2, 1, 100])
 
         model.zero_grad()
         for x, y in zip(input, target):
-            out, hidden = model(x, hidden)
+            out, (hidden, cell_state) = model(x, hidden, cell_state)
             loss += criterion(out[-1], y)
 
         loss.backward()
