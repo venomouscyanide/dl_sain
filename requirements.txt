@@ -3,3 +3,4 @@ gdown==3.13.0
 torch==1.8.1
 torchvision==0.9.1
 pandas==1.0.3
+unidecode==1.2.0
