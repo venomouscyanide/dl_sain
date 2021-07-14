@@ -150,19 +150,47 @@ class MakePasswordGuesses:
         return [common_pwd[0:end] for end in range(min_len, len(common_pwd))]
 
     def _make_guesses(self, most_common: List[Tuple[str, int]], dataset_counter: Counter):
+        # TODO: Refactor. Super messy right now.
         total_correct_guesses = 0
         uniq_guessed_passwords = set()
         all_starters_used = set()
         total_guess_tracker = 0
 
+        seen_edge_cases = set()
         guesser = PasswordGuesserUsingRNN()
         for common_pwd, _ in most_common:
             starter_candidates = self._form_candidates(common_pwd)
             all_starters_used |= set(starter_candidates)
 
             for candidate in starter_candidates:
+                if len(candidate) > self.MAX_LENGTH:
+                    if candidate not in seen_edge_cases:
+                        seen_edge_cases.add(candidate)
+                        if total_guess_tracker > self.MAX_GUESSES:
+                            return total_correct_guesses, uniq_guessed_passwords, all_starters_used
 
-                for max_len in range(self.MIN_LENGTH, self.MAX_LENGTH):
+                        total_guess_tracker += 1
+                        guess = candidate
+                        self._update_if_guess_is_correct(uniq_guessed_passwords, guess, candidate, max_len,
+                                                         dataset_counter, total_correct_guesses)
+                    continue
+
+                for max_len in range(self.MIN_LENGTH, self.MAX_LENGTH + 1):
+
+                    if max_len < len(candidate):
+                        continue
+
+                    if max_len == len(candidate):
+                        if candidate not in seen_edge_cases:
+                            seen_edge_cases.add(candidate)
+                            if total_guess_tracker > self.MAX_GUESSES:
+                                return total_correct_guesses, uniq_guessed_passwords, all_starters_used
+
+                            total_guess_tracker += 1
+                            guess = candidate
+                            self._update_if_guess_is_correct(uniq_guessed_passwords, guess, candidate, max_len,
+                                                             dataset_counter, total_correct_guesses)
+                        continue
 
                     for _ in range(self.MAX_TRIES_PER_CONFIG):
                         if total_guess_tracker > self.MAX_GUESSES:
@@ -173,17 +201,21 @@ class MakePasswordGuesses:
                             print(f"At guess {total_guess_tracker} of {self.MAX_GUESSES}")
 
                         guess = guesser.evaluate_password(self.model, candidate, max_length=max_len)
-
-                        if guess not in uniq_guessed_passwords:
-                            occurrences = dataset_counter.get(guess)
-                            if occurrences:
-                                if self.verbose:
-                                    print(
-                                        f"Correct guess: {guess}, for candidate: {candidate}, given max_len: {max_len}")
-                                total_correct_guesses += occurrences
-                                uniq_guessed_passwords.add(guess)
+                        self._update_if_guess_is_correct(uniq_guessed_passwords, guess, candidate, max_len,
+                                                         dataset_counter, total_correct_guesses)
 
         return total_correct_guesses, uniq_guessed_passwords, all_starters_used
+
+    def _update_if_guess_is_correct(self, uniq_guessed_passwords: Set[str], guess: str, candidate: str, max_len: int,
+                                    dataset_counter: Counter, total_correct_guesses: int):
+        if guess not in uniq_guessed_passwords:
+            occurrences = dataset_counter.get(guess)
+            if occurrences:
+                if self.verbose:
+                    print(
+                        f"Correct guess: {guess}, for candidate: {candidate}, given max_len: {max_len}")
+                total_correct_guesses += occurrences
+                uniq_guessed_passwords.add(guess)
 
     def _write_debug(self, dataset_name: str, file_name: str, data_as_set: Set[str]):
         debug_folder = f'debug_{dataset_name}'
