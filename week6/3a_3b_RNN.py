@@ -1,21 +1,18 @@
+import math
+import os
 import string
+from collections import Counter
+from math import ceil
+from typing import List, Set, Tuple
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from week6.pwd_dataset_manager.dataset_manager import DatasetFactory, get_dataset
-from week6.utils import get_random_password_chunk
+from week6.utils import get_input_expected_clixsense, convert_str_to_tensor
 
 device = "cuda"
-
-
-def convert_str_to_tensor(string_to_convert: str):
-    size = len(string_to_convert)
-    converted_tensor = torch.zeros(size, 1).long()
-    for index, char in enumerate(string_to_convert):
-        converted_tensor[index][0] = string.printable.index(char)
-    return converted_tensor.to(device)
 
 
 class GRU_RNN(nn.Module):
@@ -27,7 +24,7 @@ class GRU_RNN(nn.Module):
         self.embedding = nn.Embedding(len(string.printable), embedding_dim=self.embedding_dim)
         self.linear = nn.Linear(hidden_size, output_size)
 
-    def forward(self, input, hidden_state):
+    def forward(self, input: torch.Tensor, hidden_state: torch.Tensor):
         input = self.embedding(input)
         reshaped_input = input.view(1, 1, self.embedding_dim)
         input, hidden_state = self.gru(reshaped_input, hidden_state)
@@ -37,63 +34,75 @@ class GRU_RNN(nn.Module):
 
 class PasswordGuesserUsingRNN:
     def __init__(self):
-        self.input_size = 6
         self.hidden_size = 100
-        self.no_of_hidden_layers = 2
+        self.no_of_hidden_layers = 20
         self.output_size = len(string.printable)
-        self.embedding_dim = 6
-        self.epochs = 100000
-        self.eta = 0.005
+        self.embedding_dim = 5
+        self.epochs = 10
+        self.eta = 1e-4
 
     def train_and_evaluate(self):
-        gru_model = GRU_RNN(self.embedding_dim, self.hidden_size, self.no_of_hidden_layers, self.output_size).to(device)
-
         dataset_klass = DatasetFactory().get("ClixSense")
         dataset = get_dataset(dataset_klass)
 
+        gru_model = GRU_RNN(self.embedding_dim, self.hidden_size, self.no_of_hidden_layers, self.output_size).to(device)
         optimizer = torch.optim.Adam(gru_model.parameters(), lr=self.eta)
         loss_fn = CrossEntropyLoss()
+
+        n_most_common, pwd_inp_exp = get_input_expected_clixsense(dataset)
+        # total_len of dict = 1338980
+        # total length of passwords = 2221027
         for epoch in range(self.epochs):
-            hidden_state = self._init_hidden()
-            loss = 0
-            input, target = get_random_password_chunk(dataset)
-            input_tensor = convert_str_to_tensor(input)
-            target_tensor = convert_str_to_tensor(target)
+            for pwd_index, (most_common_pwd, num_occ) in enumerate(n_most_common[:]):
+                inp_target_set = pwd_inp_exp[most_common_pwd]
+                for _ in range(ceil((num_occ / 100000) * 100)):
+                    for input_pwd, target_pwd in inp_target_set:
+                        loss = 0
+                        optimizer.zero_grad()
 
-            gru_model.zero_grad()
-            for input, expected in zip(input_tensor, target_tensor):
-                output, hidden_state = gru_model(input, hidden_state)
-                loss += loss_fn(output[-1], expected)
+                        hidden_state = self._init_hidden()
+                        input_tensor = convert_str_to_tensor(input_pwd)
+                        target_tensor = convert_str_to_tensor(target_pwd)
 
-            loss.backward()
-            optimizer.step()
+                        for input, expected in zip(input_tensor, target_tensor):
+                            output, hidden_state = gru_model(input, hidden_state)
+                            loss += loss_fn(output[-1], expected)
 
-            loss = loss.item() / len(input)
-            if epoch % 100 == 0:
-                print(f'At epoch: {epoch} with loss: {loss}')
-                start = "h"
-                prediction = self.eval(gru_model, start, 5)
-                print(f"Prediction is {prediction} for start with '{start}'")
+                        loss.backward()
+                        optimizer.step()
 
-    def eval(self, gru_model, password_start, max_length):
+                        loss = loss.item() / len(input_pwd)
+
+                if pwd_index % 1000 == 0:
+                    print(f"At pwd_index: {pwd_index} of {len(n_most_common)}")
+                    print(f"training password: {most_common_pwd}")
+
+                    print(f'At epoch: {epoch} with loss: {loss}')
+                    start = "123"
+                    prediction = self.evaluate_password(gru_model, start, 15)
+                    print(f"Prediction is {prediction} for start with '{start}'")
+
+        return gru_model
+
+    def evaluate_password(self, gru_model: nn.Module, password_start: str, max_length: int):
         prediction = password_start
         start_tensor = convert_str_to_tensor(password_start)
+        with torch.no_grad():
+            hidden_state = self._init_hidden()
+            for char in start_tensor:
+                _, hidden_state = gru_model(char, hidden_state)
 
-        hidden_state = self._init_hidden()
-        for char in start_tensor:
-            _, hidden_state = gru_model(char, hidden_state)
+            input = start_tensor[-1]
+            for char_gen in range(max_length - len(password_start)):
+                output, hidden_state = gru_model(input, hidden_state)
 
-        input = start_tensor[-1]
-        for char_gen in range(max_length - len(password_start)):
-            output, hidden_state = gru_model(input, hidden_state)
+                # understand below; taken from the ref colab
+                output_dist = output.data.view(-1).exp()
+                top_i = torch.multinomial(output_dist, 1)[0]
 
-            # understand below; taken from the ref colab
-            output_dist = output.data.view(-1).exp()
-            top_i = torch.multinomial(output_dist, 1)[0]
-
-            char_predicted = string.printable[top_i]
-            prediction += char_predicted
-            input = convert_str_to_tensor(char_predicted)
+                char_predicted = string.printable[top_i]
+                prediction += char_predicted
+                input = convert_str_to_tensor(char_predicted)
 
         return prediction
 
@@ -102,5 +111,91 @@ class PasswordGuesserUsingRNN:
         return torch.zeros(self.no_of_hidden_layers, 1, self.hidden_size).to(device)
 
 
+class MakePasswordGuesses:
+    MIN_LENGTH: int = 5
+    MAX_LENGTH: int = 15
+    MAX_TRIES_PER_CONFIG: int = 5
+    MAX_GUESSES: int = int(math.pow(10, 6))
+
+    def __init__(self, model: nn.Module, verbose: bool = True):
+        self.model = model
+        self.verbose = verbose
+
+    def evaluate_dataset(self, dataset_name: str) -> Tuple[Set[str], Set[str]]:
+        dataset_klass = DatasetFactory().get(dataset_name)
+        dataset = get_dataset(dataset_klass)
+
+        dataset_counter = Counter(dataset)
+
+        print(f'Total passwords in {dataset_name} is {len(dataset)}')
+        most_common = dataset_counter.most_common()
+
+        total_correct_guesses, guessed_passwords, all_starters_used = self._make_guesses(most_common, dataset_counter)
+        missed_passwords = set(dataset_counter.keys()).difference(guessed_passwords)
+
+        print(
+            f"Unique guesses correct: {len(guessed_passwords)} and Total guesses: {total_correct_guesses} and total misses: {len(missed_passwords)}"
+        )
+        print(f"Coverage on {dataset_name}: {round(total_correct_guesses) / len(dataset)}")
+
+        self._write_debug(dataset_name, "all_starters.txt", all_starters_used)
+        self._write_debug(dataset_name, "unique_correct_guesses.txt", guessed_passwords)
+        self._write_debug(dataset_name, "missed_passwords.txt", missed_passwords)
+
+        return guessed_passwords, missed_passwords
+
+    def _form_candidates(self, common_pwd: str) -> List[str]:
+        min_len = 3
+        return [common_pwd[0:end] for end in range(min_len, len(common_pwd))]
+
+    def _make_guesses(self, most_common: List[Tuple[str, int]], dataset_counter: Counter):
+        total_correct_guesses = 0
+        uniq_guessed_passwords = set()
+        all_starters_used = set()
+        total_guess_tracker = 0
+
+        for common_pwd, _ in most_common:
+            starter_candidates = self._form_candidates(common_pwd)
+            all_starters_used |= set(starter_candidates)
+
+            for candidate in starter_candidates:
+
+                for max_len in range(self.MIN_LENGTH, self.MAX_LENGTH):
+
+                    for _ in range(self.MAX_TRIES_PER_CONFIG):
+                        if total_guess_tracker > self.MAX_GUESSES:
+                            return total_correct_guesses, uniq_guessed_passwords, all_starters_used
+
+                        total_guess_tracker += 1
+                        if total_guess_tracker % 1000 == 0 and self.verbose:
+                            print(f"At guess {total_guess_tracker} of {self.MAX_GUESSES}")
+
+                        guess = PasswordGuesserUsingRNN().evaluate_password(self.model, candidate, max_length=max_len)
+
+                        if guess not in uniq_guessed_passwords:
+                            occurrences = dataset_counter.get(guess)
+                            if occurrences:
+                                if self.verbose:
+                                    print(
+                                        f"Correct guess: {guess}, for candidate: {candidate}, given max_len: {max_len}")
+                                total_correct_guesses += occurrences
+                                uniq_guessed_passwords.add(guess)
+
+        return total_correct_guesses, uniq_guessed_passwords, all_starters_used
+
+    def _write_debug(self, dataset_name: str, file_name: str, data_as_set: Set[str]):
+        debug_folder = f'debug_{dataset_name}'
+        if not os.path.exists(debug_folder):
+            os.mkdir(debug_folder)
+
+        data_as_str = '\n'.join(data_as_set)
+        with open(os.path.join(debug_folder, file_name), "w") as debug_file:
+            debug_file.write(data_as_str)
+
+
 if __name__ == '__main__':
-    PasswordGuesserUsingRNN().train_and_evaluate()
+    # gru_model = PasswordGuesserUsingRNN().train_and_evaluate()
+    # print(PasswordGuesserUsingRNN().evaluate_password(gru_model, "123", 20))
+    # torch.save(gru_model, 'saved_gru_pwd.model')
+    gru_model = torch.load('saved_gru_pwd.model')
+    MakePasswordGuesses(gru_model).evaluate_dataset('Mate1')
