@@ -1,3 +1,4 @@
+import argparse
 import math
 import os
 import string
@@ -193,9 +194,20 @@ class MakePasswordGuesses:
             debug_file.write(data_as_str)
 
 
+def train_and_save():
+    gru_model = PasswordGuesserUsingRNN().train_and_evaluate()
+    print(PasswordGuesserUsingRNN().evaluate_password(gru_model, "123", 20))
+    torch.save(gru_model, 'saved_gru_pwd.model')
+
+
 if __name__ == '__main__':
-    # gru_model = PasswordGuesserUsingRNN().train_and_evaluate()
-    # print(PasswordGuesserUsingRNN().evaluate_password(gru_model, "123", 20))
-    # torch.save(gru_model, 'saved_gru_pwd.model')
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('--dataset_name', required=True,
+                        help='The name of the dataset on which guessing is to be conducted on',
+                        choices=['Mate1', '000webhost'])
+
+    args = parser.parse_args()
+    dataset_name = args.dataset_name
+    print(f"Running guessing on: {dataset_name}")
     gru_model = torch.load('saved_gru_pwd.model')
-    MakePasswordGuesses(gru_model).evaluate_dataset('Mate1')
+    MakePasswordGuesses(gru_model).evaluate_dataset(dataset_name)
