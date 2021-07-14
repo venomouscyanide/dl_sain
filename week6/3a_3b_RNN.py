@@ -155,6 +155,7 @@ class MakePasswordGuesses:
         all_starters_used = set()
         total_guess_tracker = 0
 
+        guesser = PasswordGuesserUsingRNN()
         for common_pwd, _ in most_common:
             starter_candidates = self._form_candidates(common_pwd)
             all_starters_used |= set(starter_candidates)
@@ -171,7 +172,7 @@ class MakePasswordGuesses:
                         if total_guess_tracker % 1000 == 0 and self.verbose:
                             print(f"At guess {total_guess_tracker} of {self.MAX_GUESSES}")
 
-                        guess = PasswordGuesserUsingRNN().evaluate_password(self.model, candidate, max_length=max_len)
+                        guess = guesser.evaluate_password(self.model, candidate, max_length=max_len)
 
                         if guess not in uniq_guessed_passwords:
                             occurrences = dataset_counter.get(guess)
