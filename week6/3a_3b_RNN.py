@@ -127,17 +127,18 @@ class MakePasswordGuesses:
         dataset = get_dataset(dataset_klass)
 
         dataset_counter = Counter(dataset)
-
-        print(f'Total passwords in {dataset_name} is {len(dataset)}')
+        dataset_len = len(dataset)
+        print(f'Total passwords in {dataset_name} is {dataset_len}')
         most_common = dataset_counter.most_common()
 
-        total_correct_guesses, guessed_passwords, all_starters_used = self._make_guesses(most_common, dataset_counter)
+        total_correct_guesses, guessed_passwords, all_starters_used = self._make_guesses(most_common, dataset_counter,
+                                                                                         dataset_len)
         missed_passwords = set(dataset_counter.keys()).difference(guessed_passwords)
 
         print(
             f"Unique guesses correct: {len(guessed_passwords)} and Total guesses: {total_correct_guesses} and total misses: {len(missed_passwords)}"
         )
-        print(f"Coverage on {dataset_name}: {round(total_correct_guesses) / len(dataset)}")
+        print(f"Coverage on {dataset_name}: {(total_correct_guesses / len(dataset)) * 100}")
 
         self._write_debug(dataset_name, "all_starters.txt", all_starters_used)
         self._write_debug(dataset_name, "unique_correct_guesses.txt", guessed_passwords)
@@ -149,8 +150,9 @@ class MakePasswordGuesses:
         min_len = 3
         return [common_pwd[0:end] for end in range(min_len, len(common_pwd))]
 
-    def _make_guesses(self, most_common: List[Tuple[str, int]], dataset_counter: Counter):
+    def _make_guesses(self, most_common: List[Tuple[str, int]], dataset_counter: Counter, dataset_len: int):
         # TODO: Refactor. Super messy right now.
+        importance = 4
         total_correct_guesses = 0
         uniq_guessed_passwords = set()
         all_starters_used = set()
@@ -158,7 +160,7 @@ class MakePasswordGuesses:
 
         seen_edge_cases = set()
         guesser = PasswordGuesserUsingRNN()
-        for common_pwd, _ in most_common:
+        for common_pwd, common_occ in most_common:
             starter_candidates = self._form_candidates(common_pwd)
             all_starters_used |= set(starter_candidates)
 
@@ -171,8 +173,9 @@ class MakePasswordGuesses:
 
                         total_guess_tracker += 1
                         guess = candidate
-                        self._update_if_guess_is_correct(uniq_guessed_passwords, guess, candidate, max_len,
-                                                         dataset_counter, total_correct_guesses)
+                        total_correct_guesses = self._update_if_guess_is_correct(uniq_guessed_passwords, guess,
+                                                                                 candidate, max_len,
+                                                                                 dataset_counter, total_correct_guesses)
                     continue
 
                 for max_len in range(self.MIN_LENGTH, self.MAX_LENGTH + 1):
@@ -188,11 +191,13 @@ class MakePasswordGuesses:
 
                             total_guess_tracker += 1
                             guess = candidate
-                            self._update_if_guess_is_correct(uniq_guessed_passwords, guess, candidate, max_len,
-                                                             dataset_counter, total_correct_guesses)
+                            total_correct_guesses = self._update_if_guess_is_correct(uniq_guessed_passwords, guess,
+                                                                                     candidate, max_len,
+                                                                                     dataset_counter,
+                                                                                     total_correct_guesses)
                         continue
 
-                    for _ in range(self.MAX_TRIES_PER_CONFIG):
+                    for _ in range(self.MAX_TRIES_PER_CONFIG * ceil(common_occ / (dataset_len / importance) * 100)):
                         if total_guess_tracker > self.MAX_GUESSES:
                             return total_correct_guesses, uniq_guessed_passwords, all_starters_used
 
@@ -201,8 +206,9 @@ class MakePasswordGuesses:
                             print(f"At guess {total_guess_tracker} of {self.MAX_GUESSES}")
 
                         guess = guesser.evaluate_password(self.model, candidate, max_length=max_len)
-                        self._update_if_guess_is_correct(uniq_guessed_passwords, guess, candidate, max_len,
-                                                         dataset_counter, total_correct_guesses)
+                        total_correct_guesses = self._update_if_guess_is_correct(uniq_guessed_passwords, guess,
+                                                                                 candidate, max_len,
+                                                                                 dataset_counter, total_correct_guesses)
 
         return total_correct_guesses, uniq_guessed_passwords, all_starters_used
 
@@ -213,9 +219,11 @@ class MakePasswordGuesses:
             if occurrences:
                 if self.verbose:
                     print(
-                        f"Correct guess: {guess}, for candidate: {candidate}, given max_len: {max_len}")
+                        f"Correct guess: {guess}, for candidate: {candidate}, given max_len: {max_len} \nTotal Correct guesses so far:{total_correct_guesses}"
+                    )
                 total_correct_guesses += occurrences
                 uniq_guessed_passwords.add(guess)
+        return total_correct_guesses
 
     def _write_debug(self, dataset_name: str, file_name: str, data_as_set: Set[str]):
         debug_folder = f'debug_{dataset_name}'
