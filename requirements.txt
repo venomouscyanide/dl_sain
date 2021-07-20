@@ -1,6 +1,7 @@
-numpy==1.20.2
+numpy==1.19.5
 gdown==3.13.0
-torch==1.8.1
+torch==1.9.0
 torchvision==0.9.1
 pandas==1.0.3
 unidecode==1.2.0
+torchtext==0.10.0
