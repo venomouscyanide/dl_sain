@@ -161,10 +161,11 @@ def evaluate(eval_model, data_source, criterion, bptt, ntokens):
     print(output.size())
     out = []
     for i in range(20):
-        output_dist = temp[i, i, :].exp()
-        top_i = torch.multinomial(output_dist, 1)[0]
-        char_predicted = string.printable[top_i]
-        out.append(char_predicted)
+        for j in range(20):
+            output_dist = temp[j, i, :].exp()
+            top_i = torch.multinomial(output_dist, 1)[0]
+            char_predicted = string.printable[top_i]
+            out.append(char_predicted)
     print("".join(out))
     # print(len(out))
 
