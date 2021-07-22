@@ -41,7 +41,7 @@ def get_input_expected_clixsense(dataset: List[str]) -> Tuple[List[Tuple[str, in
     return most_common, password_slices_dict
 
 
-def convert_str_to_tensor(string_to_convert: str):
+def convert_str_to_tensor(string_to_convert: str, device="cuda"):
     size = len(string_to_convert)
     converted_tensor = torch.zeros(size, 1).long()
     for index, char in enumerate(string_to_convert):
